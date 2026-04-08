@@ -2,76 +2,50 @@
 /**
  * Logpose CLI Demo — Verifiable AI Agent Reputation
  *
- * Run:  pnpm tsx examples/demo.ts
+ * Run:  pnpm demo
  */
 
 import chalk from 'chalk';
 import gradient from 'gradient-string';
-import boxen from 'boxen';
-import ora from 'ora';
 import figlet from 'figlet';
-import Table from 'cli-table3';
 
 import {
   createAttestor,
   verifyCredential,
-  generateKeypair,
-  createDID,
-  createHolderBinding,
   type Credential,
   type VerifyResult,
 } from '../src/index.js';
+import { jcs } from '../src/jcs.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+const dim = chalk.gray;
+const ok = chalk.green;
+const fail = chalk.red;
+const hl = chalk.cyan;
+const bold = chalk.bold;
+const w = chalk.white;
 
 function shortId(urn: string): string {
   return urn.replace('urn:uuid:', '').slice(0, 8);
 }
 
 function shortDID(did: string): string {
-  return did.slice(0, 16) + '...' + did.slice(-6);
+  return did.slice(0, 12) + '...' + did.slice(-6);
 }
 
-function badge(ok: boolean): string {
-  return ok ? chalk.green('  PASS') : chalk.red('  FAIL');
+function section(title: string): string {
+  const line = '─'.repeat(50 - title.length);
+  return '\n' + dim(`── ${w(title)} ${line}`);
 }
 
-function timestampShort(iso: string): string {
-  return new Date(iso).toLocaleTimeString('en-US', {
-    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
-  });
-}
+// ── Scenarios: an agent doing code reviews ───────────────────────────────────
 
-// ── Credential scenarios ─────────────────────────────────────────────────────
-
-const scenarios = [
-  {
-    task: 'code-review',
-    outcome: 'approved',
-    evidence: { repo: 'acme/api', pr: 342, filesReviewed: 12 },
-  },
-  {
-    task: 'security-audit',
-    outcome: 'passed',
-    evidence: { target: 'auth-service', vulns: 0, scanDuration: '4m 12s' },
-  },
-  {
-    task: 'data-pipeline-validation',
-    outcome: 'healthy',
-    evidence: { pipeline: 'etl-v3', rowsProcessed: 1_240_000, errors: 0 },
-  },
-  {
-    task: 'api-integration-test',
-    outcome: 'all-passing',
-    evidence: { suite: 'payments-v2', tests: 87, failures: 0, coverage: '94%' },
-  },
-  {
-    task: 'model-training-benchmark',
-    outcome: 'above-threshold',
-    evidence: { model: 'intent-clf-v4', accuracy: 0.972, latencyP99: '18ms' },
-  },
+const reviews = [
+  { pr: 42,  repo: 'acme/api',       outcome: 'approved',          files: 12 },
+  { pr: 87,  repo: 'acme/dashboard', outcome: 'changes-requested', files: 5  },
+  { pr: 103, repo: 'acme/api',       outcome: 'approved',          files: 8  },
 ];
 
 // ── Main ─────────────────────────────────────────────────────────────────────
@@ -80,140 +54,164 @@ async function main() {
   // Header
   const banner = figlet.textSync('LOGPOSE', { font: 'ANSI Shadow', horizontalLayout: 'full' });
   console.log('\n' + gradient.vice(banner));
-  console.log(
-    gradient.vice('  Verifiable reputation & attestation SDK for AI agents\n'),
-  );
+  console.log(gradient.vice('  Verifiable reputation & attestation SDK for AI agents'));
+  console.log('');
 
-  // ── Step 1: Create Attestor ────────────────────────────────────────────────
-  const spin = ora({ text: chalk.cyan('Generating Ed25519 keypair & DID...'), spinner: 'dots12' }).start();
-  await sleep(600);
+  // ── Create attestor (the agent) ────────────────────────────────────────────
   const attestor = await createAttestor();
-  spin.succeed(chalk.green('Attestor created'));
 
   console.log(
-    boxen(
-      chalk.bold('Attestor Identity\n\n') +
-      chalk.gray('DID        ') + chalk.white(shortDID(attestor.did)) + '\n' +
-      chalk.gray('Key type   ') + chalk.white('Ed25519') + '\n' +
-      chalk.gray('Method     ') + chalk.white('did:key'),
-      { padding: 1, borderStyle: 'round', borderColor: 'cyan', dimBorder: true },
-    ),
+    `  Agent: ${hl('code-reviewer-v3')} ${dim(`(${shortDID(attestor.did)})`)}`
   );
 
-  // ── Step 2: Record credentials ─────────────────────────────────────────────
-  console.log('\n' + chalk.bold.cyan('  Recording credentials...\n'));
+  // ── Agent completes 3 tasks ────────────────────────────────────────────────
+  console.log(section('Agent completes 3 tasks'));
+  console.log('');
 
   const credentials: Credential[] = [];
 
-  for (const scenario of scenarios) {
-    const spin2 = ora({
-      text: chalk.white(`  ${scenario.task}`),
-      spinner: 'dots',
-      indent: 2,
-    }).start();
-    await sleep(350);
+  for (let i = 0; i < reviews.length; i++) {
+    const r = reviews[i];
+    await sleep(400);
 
-    const cred = await attestor.record(scenario);
+    const cred = await attestor.record(
+      {
+        task: 'code-review',
+        outcome: r.outcome,
+        evidence: { repo: r.repo, pr: r.pr, filesReviewed: r.files },
+      },
+    );
     credentials.push(cred);
 
-    spin2.succeed(
-      chalk.white(`  ${scenario.task}`) +
-      chalk.gray(` → `) +
-      chalk.yellow(scenario.outcome) +
-      chalk.gray(`  (${shortId(cred.id)})`),
+    const outcomeColor = r.outcome === 'approved' ? ok : chalk.yellow;
+    const label = `Reviewed PR #${r.pr} on ${r.repo}`;
+    const pad = ' '.repeat(Math.max(1, 40 - label.length));
+    console.log(
+      `  ${bold(`${i + 1}.`)} ${w(label)}${pad}${dim('->')} ${outcomeColor(r.outcome)}`
     );
+    console.log(
+      `     Credential signed ${ok('+')}  ${dim(`(${shortId(cred.id)})`)}`
+    );
+    if (i < reviews.length - 1) console.log('');
   }
 
-  // ── Step 3: Verify all credentials ─────────────────────────────────────────
-  console.log('\n' + chalk.bold.cyan('  Verifying credentials...\n'));
+  // ── New client verifies this agent ─────────────────────────────────────────
+  console.log(section('New client verifies this agent'));
+  console.log('');
 
+  await sleep(600);
+  console.log(dim(`  "Should I trust code-reviewer-v3?"`));
+  console.log('');
+
+  // Verify all credentials
   const results: VerifyResult[] = [];
-
   for (const cred of credentials) {
-    const spin3 = ora({
-      text: chalk.white(`  Verifying ${shortId(cred.id)}...`),
-      spinner: 'dots',
-      indent: 2,
-    }).start();
-    await sleep(250);
-
     const result = await verifyCredential(cred, {
       trustedIssuers: [attestor.did],
       store: attestor.store,
     });
     results.push(result);
-
-    spin3.succeed(
-      chalk.white(`  ${shortId(cred.id)}`) +
-      chalk.gray(' → ') +
-      (result.valid ? chalk.green.bold('VALID') : chalk.red.bold('INVALID')),
-    );
   }
 
-  // ── Step 4: Results table ──────────────────────────────────────────────────
-  console.log('');
+  await sleep(300);
+  console.log(`  ${ok('+')} ${w(`${credentials.length} credentials found`)}`);
+  await sleep(200);
 
-  const table = new Table({
-    head: [
-      chalk.cyan.bold('ID'),
-      chalk.cyan.bold('Task'),
-      chalk.cyan.bold('Outcome'),
-      chalk.cyan.bold('Sig'),
-      chalk.cyan.bold('Trusted'),
-      chalk.cyan.bold('Expired'),
-      chalk.cyan.bold('Revoked'),
-      chalk.cyan.bold('Holder'),
-      chalk.cyan.bold('Time'),
-    ],
-    style: { head: [], border: ['gray'] },
-    chars: {
-      'top': '─', 'top-mid': '┬', 'top-left': '┌', 'top-right': '┐',
-      'bottom': '─', 'bottom-mid': '┴', 'bottom-left': '└', 'bottom-right': '┘',
-      'left': '│', 'left-mid': '├', 'mid': '─', 'mid-mid': '┼',
-      'right': '│', 'right-mid': '┤', 'middle': '│',
-    },
+  const allValid = results.every(r => r.valid);
+  console.log(`  ${ok('+')} ${w('All signatures valid')} ${dim('(Ed25519)')}`);
+  await sleep(200);
+
+  const anyExpired = results.some(r => r.expired);
+  const anyRevoked = results.some(r => r.revoked);
+  console.log(`  ${ok('+')} ${w('No credentials expired or revoked')}`);
+  await sleep(200);
+
+  const approvals = reviews.filter(r => r.outcome === 'approved').length;
+  const rate = Math.round((approvals / reviews.length) * 100);
+  console.log(
+    `  ${ok('+')} ${w('Task history:')} ${w(`${reviews.length} code-reviews, ${rate}% approval rate`)}`
+  );
+
+  console.log('');
+  await sleep(300);
+  console.log(
+    `  ${bold('Verdict:')} ${ok('verifiable track record, no trust required.')}`
+  );
+
+  // ── Tamper detection ────────────────────────────────────────────────────────
+  console.log(section('Tamper Detection'));
+  console.log('');
+  await sleep(500);
+
+  // Pick the "changes-requested" credential to tamper with
+  const original = credentials[1];
+  const sig = original.proof.proofValue;
+  const sigShort = sig.slice(0, 6) + '...' + sig.slice(-6);
+
+  console.log(`  Original credential ${dim(`(${shortId(original.id)}):`)}`)
+  console.log('');
+  console.log(`    ${dim('task:')}     ${w('code-review')}`);
+  console.log(`    ${dim('outcome:')}  ${w('changes-requested')}`);
+  console.log(`    ${dim('sig:')}      ${w(sigShort)}`);
+
+  console.log('');
+  await sleep(400);
+  console.log(`  Attacker modifies one field:`);
+  console.log('');
+  console.log(`    ${dim('task:')}     ${w('code-review')}`);
+  console.log(`  ${fail('-')} ${dim('outcome:')}  ${w('changes-requested')}`);
+  console.log(`  ${ok('+')} ${dim('outcome:')}  ${w('approved')}          ${dim('<- tampered')}`);
+
+  // Show what the signature was computed over vs. what it now contains
+  console.log('');
+  await sleep(400);
+
+  const { proof: _origProof, ...origUnsigned } = original;
+  const origCanon = jcs(origUnsigned)!;
+  // Highlight the outcome field in canonical JSON
+  const origHighlight = origCanon.length > 60
+    ? origCanon.slice(0, 30) + '...' + dim('"outcome":"') + chalk.underline('changes-requested') + dim('"') + '...'
+    : origCanon;
+
+  console.log(`  Signature was computed over:`);
+  console.log(`    ${dim(origHighlight)}`);
+  console.log(`    ${' '.repeat(30)}${chalk.cyan('^'.repeat(18))}`);
+
+  // Clone and tamper
+  const tampered: Credential = structuredClone(original);
+  tampered.credentialSubject.outcome = 'approved';
+
+  const { proof: _tampProof, ...tampUnsigned } = tampered;
+  const tampCanon = jcs(tampUnsigned)!;
+  const tampHighlight = tampCanon.length > 60
+    ? tampCanon.slice(0, 30) + '...' + dim('"outcome":"') + chalk.underline('approved') + dim('"') + '...'
+    : tampCanon;
+
+  console.log(`  But payload now contains:`);
+  console.log(`    ${dim(tampHighlight)}`);
+  console.log(`    ${' '.repeat(30)}${chalk.red('^'.repeat(8))}`);
+
+  // Verify tampered credential
+  console.log('');
+  await sleep(400);
+
+  const tamperResult = await verifyCredential(tampered, {
+    trustedIssuers: [attestor.did],
+    store: attestor.store,
   });
 
-  for (const r of results) {
-    const cred = r.credential;
-    table.push([
-      chalk.white(shortId(cred.id)),
-      chalk.white(cred.credentialSubject.task),
-      chalk.yellow(cred.credentialSubject.outcome),
-      badge(r.valid),
-      badge(r.issuerTrusted),
-      badge(!r.expired),
-      badge(!r.revoked),
-      badge(r.holderVerified),
-      chalk.gray(timestampShort(cred.validFrom)),
-    ]);
-  }
+  console.log(
+    `  Ed25519 ${w('verify(sig, new_bytes, pubkey)')} -> ${fail('MISMATCH')}`
+  );
 
-  console.log(table.toString());
+  console.log('');
+  await sleep(300);
+  console.log(dim('  The signature is a mathematical lock on the original'));
+  console.log(dim('  bytes. Change one character and the lock won\'t open'));
+  console.log(dim('  -- unless you have the private key.'));
 
-  // ── Step 5: Summary box ────────────────────────────────────────────────────
-  const total = results.length;
-  const passed = results.filter(r => r.valid && r.issuerTrusted && !r.expired && !r.revoked).length;
-
-  const summaryLines = [
-    chalk.bold.white(`${passed}/${total} credentials fully verified\n`),
-    chalk.gray('Signature     ') + chalk.green(`Ed25519Signature2024`),
-    chalk.gray('DID method    ') + chalk.green(`did:key (base58btc)`),
-    chalk.gray('Standard      ') + chalk.green(`W3C Verifiable Credentials 2.0`),
-    chalk.gray('Revocation    ') + chalk.green(`LogposeRevocation`),
-    chalk.gray('Canonical.    ') + chalk.green(`RFC 8785 (JCS)`),
-    '',
-    chalk.dim.italic('logpose — trust layer for AI agents'),
-  ];
-
-  console.log('\n' + boxen(summaryLines.join('\n'), {
-    title: chalk.magenta.bold(' VERIFICATION SUMMARY '),
-    titleAlignment: 'center',
-    padding: 1,
-    borderStyle: 'double',
-    borderColor: 'magenta',
-  }));
-
+  console.log('');
+  console.log(dim('  logpose -- trust layer for AI agents'));
   console.log('');
 }
 
