@@ -1,0 +1,8 @@
+src/
+test/
+examples/
+.github/
+.claude/
+.env
+tsconfig.json
+vitest.config.*
