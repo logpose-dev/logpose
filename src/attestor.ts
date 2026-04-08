@@ -9,15 +9,18 @@ import type {
   CredentialFilter,
   CredentialStore,
   Keypair,
+  RecordOptions,
 } from './types.js';
 
 export interface Attestor {
   readonly did: string;
-  readonly privateKeyHex: string;
-  record(payload: AttestationPayload, subject?: string): Promise<Credential>;
+  readonly store: CredentialStore;
+  getPrivateKeyHex(): string;
+  record(payload: AttestationPayload, options?: RecordOptions): Promise<Credential>;
   get(id: string): Promise<Credential | undefined>;
   list(filter?: CredentialFilter): Promise<Credential[]>;
   count(filter?: CredentialFilter): Promise<number>;
+  revoke(id: string): Promise<void>;
 }
 
 export async function createAttestor(config?: AttestorConfig): Promise<Attestor> {
@@ -27,14 +30,24 @@ export async function createAttestor(config?: AttestorConfig): Promise<Attestor>
 
   const store: CredentialStore = config?.store ?? new MemoryStore();
   const did = createDID(keypair.publicKey);
-  const privateKeyHex = bytesToHex(keypair.privateKey);
+  const hex = bytesToHex(keypair.privateKey);
 
   return {
     did,
-    privateKeyHex,
+    store,
 
-    async record(payload: AttestationPayload, subject?: string): Promise<Credential> {
-      const credential = createCredential({ keypair, subject, payload });
+    getPrivateKeyHex(): string {
+      return hex;
+    },
+
+    async record(payload: AttestationPayload, options?: RecordOptions): Promise<Credential> {
+      const credential = createCredential({
+        keypair,
+        subject: options?.subject,
+        payload,
+        validUntil: options?.validUntil,
+        holderBinding: options?.holderBinding,
+      });
       await store.save(credential);
       return credential;
     },
@@ -49,6 +62,10 @@ export async function createAttestor(config?: AttestorConfig): Promise<Attestor>
 
     async count(filter?: CredentialFilter): Promise<number> {
       return store.count(filter);
+    },
+
+    async revoke(id: string): Promise<void> {
+      await store.revoke(id);
     },
   };
 }

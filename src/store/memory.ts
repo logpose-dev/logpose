@@ -2,6 +2,7 @@ import type { Credential, CredentialFilter, CredentialStore } from '../types.js'
 
 export class MemoryStore implements CredentialStore {
   private credentials = new Map<string, Credential>();
+  private revokedIds = new Set<string>();
 
   async save(credential: Credential): Promise<void> {
     this.credentials.set(credential.id, credential);
@@ -37,5 +38,13 @@ export class MemoryStore implements CredentialStore {
   async count(filter?: CredentialFilter): Promise<number> {
     const results = await this.list(filter);
     return results.length;
+  }
+
+  async revoke(id: string): Promise<void> {
+    this.revokedIds.add(id);
+  }
+
+  async isRevoked(id: string): Promise<boolean> {
+    return this.revokedIds.has(id);
   }
 }

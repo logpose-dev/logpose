@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { createAttestor, isValidDID } from '../src/index.js';
+import {
+  bytesToHex,
+  createAttestor,
+  createHolderBinding,
+  generateKeypair,
+  isValidDID,
+  verifyCredential,
+} from '../src/index.js';
 
 describe('createAttestor', () => {
   it('creates an attestor with a valid did:key DID', async () => {
@@ -16,7 +23,10 @@ describe('createAttestor', () => {
       evidence: { pr: 42 },
     });
 
-    expect(credential['@context']).toEqual(['https://www.w3.org/ns/credentials/v2']);
+    expect(credential['@context']).toEqual([
+      'https://www.w3.org/ns/credentials/v2',
+      'https://w3id.org/security/data-integrity/v2',
+    ]);
     expect(credential.type).toEqual(['VerifiableCredential', 'LogposeAttestation']);
     expect(credential.issuer).toBe(attestor.did);
     expect(credential.credentialSubject.task).toBe('code-review');
@@ -24,6 +34,10 @@ describe('createAttestor', () => {
     expect(credential.credentialSubject.evidence).toEqual({ pr: 42 });
     expect(credential.proof.type).toBe('Ed25519Signature2024');
     expect(credential.proof.proofPurpose).toBe('assertionMethod');
+    expect(credential.credentialStatus).toEqual({
+      type: 'LogposeRevocation',
+      id: credential.id,
+    });
   });
 
   it('retrieves a credential by ID after recording', async () => {
@@ -51,10 +65,61 @@ describe('createAttestor', () => {
     expect(total).toBe(3);
   });
 
-  it('preserves identity across attestors using privateKeyHex', async () => {
+  it('preserves identity across attestors using getPrivateKeyHex()', async () => {
     const first = await createAttestor();
-    const second = await createAttestor({ privateKey: first.privateKeyHex });
+    const second = await createAttestor({ privateKey: first.getPrivateKeyHex() });
     expect(second.did).toBe(first.did);
-    expect(second.privateKeyHex).toBe(first.privateKeyHex);
+    expect(second.getPrivateKeyHex()).toBe(first.getPrivateKeyHex());
+  });
+
+  it('getPrivateKeyHex() is not enumerable via JSON.stringify', async () => {
+    const attestor = await createAttestor();
+    const json = JSON.stringify(attestor);
+    expect(json).not.toContain(attestor.getPrivateKeyHex());
+  });
+
+  it('records credential with subject via options bag', async () => {
+    const issuer = await createAttestor();
+    const subject = await createAttestor();
+    const credential = await issuer.record(
+      { task: 'audit', outcome: 'clean' },
+      { subject: subject.did },
+    );
+    expect(credential.credentialSubject.id).toBe(subject.did);
+    expect(credential.issuer).toBe(issuer.did);
+  });
+
+  it('records credential with validUntil via options bag', async () => {
+    const attestor = await createAttestor();
+    const expiry = new Date(Date.now() + 86400_000).toISOString();
+    const credential = await attestor.record(
+      { task: 'deploy', outcome: 'success' },
+      { validUntil: expiry },
+    );
+    expect(credential.validUntil).toBe(expiry);
+  });
+
+  it('records credential with holder binding via options bag', async () => {
+    const issuer = await createAttestor();
+    const subjectKp = generateKeypair();
+    const subject = await createAttestor({ privateKey: bytesToHex(subjectKp.privateKey) });
+    const binding = createHolderBinding(subjectKp, 'consent-challenge');
+
+    const credential = await issuer.record(
+      { task: 'audit', outcome: 'clean' },
+      { subject: subject.did, holderBinding: binding },
+    );
+    expect(credential.credentialSubject.holderBinding).toEqual(binding);
+  });
+
+  it('revokes a credential', async () => {
+    const attestor = await createAttestor();
+    const credential = await attestor.record({ task: 'test', outcome: 'pass' });
+
+    await attestor.revoke(credential.id);
+
+    const result = await verifyCredential(credential, { store: attestor.store });
+    expect(result.valid).toBe(true);
+    expect(result.revoked).toBe(true);
   });
 });
