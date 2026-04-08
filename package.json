@@ -1,5 +1,5 @@
 {
-  "name": "logpose",
+  "name": "@logpose-dev/logpose",
   "version": "0.1.0",
   "description": "Verifiable reputation and attestation SDK for AI agents",
   "type": "module",
