@@ -1,0 +1,38 @@
+{
+  "name": "logpose",
+  "version": "0.1.0",
+  "description": "Verifiable reputation and attestation SDK for AI agents",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "attestation",
+    "credentials",
+    "did",
+    "verifiable-credentials",
+    "ai-agents"
+  ],
+  "license": "MIT",
+  "packageManager": "pnpm@10.33.0",
+  "dependencies": {
+    "@noble/curves": "^2.0.1",
+    "@scure/base": "^2.0.0",
+    "canonicalize": "^2.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.2",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.3"
+  }
+}
