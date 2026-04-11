@@ -6,7 +6,18 @@ settings:
 
 importers:
 
-  .:
+  .: {}
+
+  packages/a2a:
+    devDependencies:
+      '@logpose-dev/logpose':
+        specifier: workspace:*
+        version: link:../logpose
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
+  packages/logpose:
     dependencies:
       '@scure/base':
         specifier: ^2.0.0
@@ -590,6 +601,11 @@ packages:
     engines: {node: '>=18.0.0'}
     hasBin: true
 
+  typescript@5.9.3:
+    resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
+    engines: {node: '>=14.17'}
+    hasBin: true
+
   typescript@6.0.2:
     resolution: {integrity: sha512-bGdAIrZ0wiGDo5l8c++HWtbaNCWTS4UTv7RaTH/ThVIgjkveJt83m74bBHMJkuCbslY8ixgLBVZJIOiQlQTjfQ==}
     engines: {node: '>=14.17'}
@@ -1110,6 +1126,8 @@ snapshots:
       get-tsconfig: 4.13.7
     optionalDependencies:
       fsevents: 2.3.3
+
+  typescript@5.9.3: {}
 
   typescript@6.0.2: {}
 
