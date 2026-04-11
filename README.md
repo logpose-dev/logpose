@@ -4,8 +4,8 @@ This repository contains the Logpose npm packages managed together in a pnpm wor
 
 ## Packages
 
-- `@logpose-dev/logpose` - core verifiable credential SDK for agent reputation and attestation.
-- `@logpose-dev/a2a` - transport and network adapters for agent-to-agent credential exchange.
+- `@logpose-dev/logpose` - core verifiable credential SDK for agent reputation and attestation -- [NPM Package](https://www.npmjs.com/package/@logpose-dev/logpose)
+- `@logpose-dev/a2a` - transport and network adapters for agent-to-agent credential exchange -- [NPM Package](https://www.npmjs.com/package/@logpose-dev/a2a)
 
 ## Workspace layout
 
