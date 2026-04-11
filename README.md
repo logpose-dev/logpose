@@ -7,13 +7,13 @@ Built on [W3C Verifiable Credentials 2.0](https://www.w3.org/TR/vc-data-model-2.
 ## Install
 
 ```sh
-pnpm add logpose
+pnpm add @logpose-dev/logpose
 ```
 
 ## Usage
 
 ```typescript
-import { createAttestor, verifyCredential } from 'logpose';
+import { createAttestor, verifyCredential } from '@logpose-dev/logpose';
 
 // Create an attestor (generates a new Ed25519 keypair)
 const agent = await createAttestor();
@@ -54,7 +54,7 @@ console.log(result.revoked); // true
 When an issuer attests about a different subject, the subject can prove consent by signing a challenge:
 
 ```typescript
-import { createAttestor, createHolderBinding, verifyCredential } from 'logpose';
+import { createAttestor, createHolderBinding, verifyCredential } from '@logpose-dev/logpose';
 
 const issuer = await createAttestor();
 const subject = await createAttestor();
@@ -80,7 +80,7 @@ Without a holder binding, third-party attestations have `holderVerified: false`.
 ### Trust Registry
 
 ```typescript
-import { trustIssuer, verifyCredential } from 'logpose';
+import { trustIssuer, verifyCredential } from '@logpose-dev/logpose';
 
 // Option 1: Global registry
 trustIssuer(trustedAgent.did);
