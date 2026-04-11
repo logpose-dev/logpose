@@ -1,6 +1,6 @@
 {
   "name": "@logpose-dev/logpose",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Verifiable reputation and attestation SDK for AI agents",
   "type": "module",
   "main": "dist/index.js",
@@ -32,7 +32,6 @@
     ]
   },
   "dependencies": {
-    "@noble/curves": "^2.0.1",
     "@scure/base": "^2.0.0",
     "canonicalize": "^2.1.0"
   },

@@ -4,33 +4,43 @@ import type { Credential } from '../src/index.js';
 
 function makeCredential(overrides?: {
   task?: string;
-  issuerKeypair?: ReturnType<typeof generateKeypair>;
+  issuerKeypair?: Awaited<ReturnType<typeof generateKeypair>>;
   subject?: string;
   validFrom?: string;
-}): Credential {
-  const keypair = overrides?.issuerKeypair ?? generateKeypair();
-  const cred = createCredential({
-    keypair,
-    subject: overrides?.subject,
-    payload: {
-      task: overrides?.task ?? 'default-task',
-      outcome: 'pass',
-    },
-  });
-  // Override validFrom for date range testing
-  if (overrides?.validFrom) {
-    const adjusted = { ...cred, validFrom: overrides.validFrom };
-    // Re-sign would be needed for real verification, but for store tests
-    // we just need the data shape
-    return adjusted;
-  }
-  return cred;
+}): Promise<Credential> {
+  return (async () => {
+    const keypair = overrides?.issuerKeypair ?? await generateKeypair();
+    const cred = await createCredential({
+      keypair,
+      subject: overrides?.subject,
+      payload: {
+        task: overrides?.task ?? 'default-task',
+        outcome: 'pass',
+      },
+    });
+    // Override validFrom for date range testing
+    if (overrides?.validFrom) {
+      const adjusted = { ...cred, validFrom: overrides.validFrom };
+      // Re-sign would be needed for real verification, but for store tests
+      // we just need the data shape
+      return adjusted;
+    }
+    return cred;
+  })();
 }
 
 describe('MemoryStore', () => {
   it('saves and retrieves a credential by ID', async () => {
     const store = new MemoryStore();
-    const cred = makeCredential();
+    const cred = await makeCredential();
+    await store.save(cred);
+    const retrieved = await store.load(cred.id);
+    expect(retrieved).toEqual(cred);
+  });
+
+  it('supports legacy get() alias for backward compatibility', async () => {
+    const store = new MemoryStore();
+    const cred = await makeCredential();
     await store.save(cred);
     const retrieved = await store.get(cred.id);
     expect(retrieved).toEqual(cred);
@@ -38,24 +48,24 @@ describe('MemoryStore', () => {
 
   it('returns undefined for unknown ID', async () => {
     const store = new MemoryStore();
-    expect(await store.get('urn:uuid:nonexistent')).toBeUndefined();
+    expect(await store.load('urn:uuid:nonexistent')).toBeUndefined();
   });
 
   it('lists all credentials with no filter', async () => {
     const store = new MemoryStore();
-    await store.save(makeCredential({ task: 'a' }));
-    await store.save(makeCredential({ task: 'b' }));
+    await store.save(await makeCredential({ task: 'a' }));
+    await store.save(await makeCredential({ task: 'b' }));
     const all = await store.list();
     expect(all).toHaveLength(2);
   });
 
   it('filters by issuer', async () => {
     const store = new MemoryStore();
-    const kp1 = generateKeypair();
-    const kp2 = generateKeypair();
-    await store.save(makeCredential({ issuerKeypair: kp1 }));
-    await store.save(makeCredential({ issuerKeypair: kp2 }));
-    await store.save(makeCredential({ issuerKeypair: kp1 }));
+    const kp1 = await generateKeypair();
+    const kp2 = await generateKeypair();
+    await store.save(await makeCredential({ issuerKeypair: kp1 }));
+    await store.save(await makeCredential({ issuerKeypair: kp2 }));
+    await store.save(await makeCredential({ issuerKeypair: kp1 }));
 
     const did1 = createDID(kp1.publicKey);
     const results = await store.list({ issuer: did1 });
@@ -65,10 +75,10 @@ describe('MemoryStore', () => {
 
   it('filters by subject', async () => {
     const store = new MemoryStore();
-    const kp = generateKeypair();
-    const subjectDID = createDID(generateKeypair().publicKey);
-    await store.save(makeCredential({ issuerKeypair: kp, subject: subjectDID }));
-    await store.save(makeCredential({ issuerKeypair: kp }));
+    const kp = await generateKeypair();
+    const subjectDID = createDID((await generateKeypair()).publicKey);
+    await store.save(await makeCredential({ issuerKeypair: kp, subject: subjectDID }));
+    await store.save(await makeCredential({ issuerKeypair: kp }));
 
     const results = await store.list({ subject: subjectDID });
     expect(results).toHaveLength(1);
@@ -77,9 +87,9 @@ describe('MemoryStore', () => {
 
   it('filters by task', async () => {
     const store = new MemoryStore();
-    await store.save(makeCredential({ task: 'build' }));
-    await store.save(makeCredential({ task: 'test' }));
-    await store.save(makeCredential({ task: 'build' }));
+    await store.save(await makeCredential({ task: 'build' }));
+    await store.save(await makeCredential({ task: 'test' }));
+    await store.save(await makeCredential({ task: 'build' }));
 
     const results = await store.list({ task: 'build' });
     expect(results).toHaveLength(2);
@@ -87,9 +97,9 @@ describe('MemoryStore', () => {
 
   it('filters by date range (since/until)', async () => {
     const store = new MemoryStore();
-    await store.save(makeCredential({ task: 'old', validFrom: '2026-01-01T00:00:00.000Z' }));
-    await store.save(makeCredential({ task: 'mid', validFrom: '2026-06-15T00:00:00.000Z' }));
-    await store.save(makeCredential({ task: 'new', validFrom: '2026-12-31T00:00:00.000Z' }));
+    await store.save(await makeCredential({ task: 'old', validFrom: '2026-01-01T00:00:00.000Z' }));
+    await store.save(await makeCredential({ task: 'mid', validFrom: '2026-06-15T00:00:00.000Z' }));
+    await store.save(await makeCredential({ task: 'new', validFrom: '2026-12-31T00:00:00.000Z' }));
 
     const sinceResults = await store.list({ since: '2026-06-01T00:00:00.000Z' });
     expect(sinceResults).toHaveLength(2);
@@ -107,9 +117,9 @@ describe('MemoryStore', () => {
 
   it('count respects filters', async () => {
     const store = new MemoryStore();
-    await store.save(makeCredential({ task: 'build' }));
-    await store.save(makeCredential({ task: 'test' }));
-    await store.save(makeCredential({ task: 'build' }));
+    await store.save(await makeCredential({ task: 'build' }));
+    await store.save(await makeCredential({ task: 'test' }));
+    await store.save(await makeCredential({ task: 'build' }));
 
     expect(await store.count()).toBe(3);
     expect(await store.count({ task: 'build' })).toBe(2);
@@ -118,12 +128,24 @@ describe('MemoryStore', () => {
 
   it('revoke marks a credential as revoked', async () => {
     const store = new MemoryStore();
-    const cred = makeCredential();
+    const cred = await makeCredential();
     await store.save(cred);
 
     expect(await store.isRevoked(cred.id)).toBe(false);
     await store.revoke(cred.id);
     expect(await store.isRevoked(cred.id)).toBe(true);
+  });
+
+  it('delete removes credential and revocation entry', async () => {
+    const store = new MemoryStore();
+    const cred = await makeCredential();
+    await store.save(cred);
+    await store.revoke(cred.id);
+
+    await store.delete(cred.id);
+
+    expect(await store.load(cred.id)).toBeUndefined();
+    expect(await store.isRevoked(cred.id)).toBe(false);
   });
 
   it('isRevoked returns false for unknown ID', async () => {
@@ -133,7 +155,7 @@ describe('MemoryStore', () => {
 
   it('revoking same ID twice is idempotent', async () => {
     const store = new MemoryStore();
-    const cred = makeCredential();
+    const cred = await makeCredential();
     await store.save(cred);
 
     await store.revoke(cred.id);

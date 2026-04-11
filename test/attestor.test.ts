@@ -7,6 +7,7 @@ import {
   isValidDID,
   verifyCredential,
 } from '../src/index.js';
+import type { Credential, CredentialFilter, ICredentialStore } from '../src/index.js';
 
 describe('createAttestor', () => {
   it('creates an attestor with a valid did:key DID', async () => {
@@ -49,6 +50,9 @@ describe('createAttestor', () => {
 
     const retrieved = await attestor.get(credential.id);
     expect(retrieved).toEqual(credential);
+
+    const viaStoreAlias = await attestor.store.get(credential.id);
+    expect(viaStoreAlias).toEqual(credential);
   });
 
   it('lists and filters credentials by task', async () => {
@@ -101,15 +105,66 @@ describe('createAttestor', () => {
 
   it('records credential with holder binding via options bag', async () => {
     const issuer = await createAttestor();
-    const subjectKp = generateKeypair();
+    const subjectKp = await generateKeypair();
     const subject = await createAttestor({ privateKey: bytesToHex(subjectKp.privateKey) });
-    const binding = createHolderBinding(subjectKp, 'consent-challenge');
+    const binding = await createHolderBinding(subjectKp, 'consent-challenge');
 
     const credential = await issuer.record(
       { task: 'audit', outcome: 'clean' },
       { subject: subject.did, holderBinding: binding },
     );
     expect(credential.credentialSubject.holderBinding).toEqual(binding);
+  });
+
+  it('records credential with audience via options bag', async () => {
+    const issuer = await createAttestor();
+    const credential = await issuer.record(
+      { task: 'audit', outcome: 'clean' },
+      { audience: 'https://verifier.example' },
+    );
+
+    expect(credential.aud).toBe('https://verifier.example');
+  });
+
+  it('uses an injected pluggable ICredentialStore', async () => {
+    const credentials = new Map<string, Credential>();
+    const revoked = new Set<string>();
+
+    const store: ICredentialStore = {
+      async save(credential: Credential): Promise<void> {
+        credentials.set(credential.id, credential);
+      },
+      async load(id: string): Promise<Credential | undefined> {
+        return credentials.get(id);
+      },
+      async delete(id: string): Promise<void> {
+        credentials.delete(id);
+        revoked.delete(id);
+      },
+      async list(filter?: CredentialFilter): Promise<Credential[]> {
+        const all = [...credentials.values()];
+        if (!filter?.task) {
+          return all;
+        }
+        return all.filter((credential) => credential.credentialSubject.task === filter.task);
+      },
+      async count(filter?: CredentialFilter): Promise<number> {
+        const all = await this.list(filter);
+        return all.length;
+      },
+      async revoke(id: string): Promise<void> {
+        revoked.add(id);
+      },
+      async isRevoked(id: string): Promise<boolean> {
+        return revoked.has(id);
+      },
+    };
+
+    const attestor = await createAttestor({ store });
+    const credential = await attestor.record({ task: 'test', outcome: 'pass' });
+
+    expect(await attestor.get(credential.id)).toEqual(credential);
+    expect(await attestor.count()).toBe(1);
   });
 
   it('revokes a credential', async () => {

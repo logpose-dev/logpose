@@ -9,42 +9,43 @@ import {
 } from '../src/index.js';
 
 describe('keypair', () => {
-  it('generates a keypair with 32-byte keys', () => {
-    const kp = generateKeypair();
+  it('generates a keypair with 32-byte keys', async () => {
+    const kp = await generateKeypair();
     expect(kp.privateKey).toBeInstanceOf(Uint8Array);
     expect(kp.publicKey).toBeInstanceOf(Uint8Array);
+    expect(kp.privateKey.length).toBe(32);
     expect(kp.publicKey.length).toBe(32);
   });
 
-  it('restores a keypair from hex private key', () => {
-    const original = generateKeypair();
+  it('restores a keypair from hex private key', async () => {
+    const original = await generateKeypair();
     const hex = bytesToHex(original.privateKey);
-    const restored = keypairFromPrivateKey(hex);
+    const restored = await keypairFromPrivateKey(hex);
     expect(bytesToHex(restored.publicKey)).toBe(bytesToHex(original.publicKey));
   });
 
-  it('throws on invalid hex input', () => {
-    expect(() => keypairFromPrivateKey('not-hex')).toThrow();
-    expect(() => keypairFromPrivateKey('')).toThrow();
+  it('throws on invalid hex input', async () => {
+    await expect(keypairFromPrivateKey('not-hex')).rejects.toThrow();
+    await expect(keypairFromPrivateKey('')).rejects.toThrow();
   });
 });
 
 describe('DID', () => {
-  it('round-trips: createDID → parseDID returns the same public key', () => {
-    const kp = generateKeypair();
+  it('round-trips: createDID → parseDID returns the same public key', async () => {
+    const kp = await generateKeypair();
     const did = createDID(kp.publicKey);
     const parsed = parseDID(did);
     expect(bytesToHex(parsed)).toBe(bytesToHex(kp.publicKey));
   });
 
-  it('creates a did:key starting with did:key:z', () => {
-    const kp = generateKeypair();
+  it('creates a did:key starting with did:key:z', async () => {
+    const kp = await generateKeypair();
     const did = createDID(kp.publicKey);
     expect(did).toMatch(/^did:key:z[1-9A-HJ-NP-Za-km-z]+$/);
   });
 
-  it('isValidDID returns true for valid DIDs', () => {
-    const kp = generateKeypair();
+  it('isValidDID returns true for valid DIDs', async () => {
+    const kp = await generateKeypair();
     const did = createDID(kp.publicKey);
     expect(isValidDID(did)).toBe(true);
   });

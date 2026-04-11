@@ -9,7 +9,7 @@ export { createHolderBinding } from './holder.js';
 export { generateKeypair, keypairFromPrivateKey, bytesToHex, hexToBytes } from './identity/keypair.js';
 export { createDID, parseDID, isValidDID } from './identity/did.js';
 
-export { verifyCredential } from './verify/verifier.js';
+export { verifyCredential, verifyBatch } from './verify/verifier.js';
 export { trustIssuer, untrustIssuer, isTrustedIssuer, loadRegistry, exportRegistry } from './verify/registry.js';
 
 export { MemoryStore } from './store/memory.js';
@@ -21,10 +21,14 @@ export type {
   CredentialFilter,
   CredentialStatus,
   CredentialStore,
+  ICredentialStore,
   CredentialSubject,
   HolderBinding,
   Keypair,
   Proof,
+  RevocationBatchFetcher,
+  RevocationBatchResult,
+  RevocationCache,
   RecordOptions,
   VerifyOptions,
   VerifyResult,

@@ -1,6 +1,6 @@
-import type { Credential, CredentialFilter, CredentialStore } from '../types.js';
+import type { Credential, CredentialFilter, CredentialStore, ICredentialStore } from '../types.js';
 
-export class MemoryStore implements CredentialStore {
+export class MemoryStore implements ICredentialStore, CredentialStore {
   private credentials = new Map<string, Credential>();
   private revokedIds = new Set<string>();
 
@@ -8,8 +8,17 @@ export class MemoryStore implements CredentialStore {
     this.credentials.set(credential.id, credential);
   }
 
-  async get(id: string): Promise<Credential | undefined> {
+  async load(id: string): Promise<Credential | undefined> {
     return this.credentials.get(id);
+  }
+
+  async get(id: string): Promise<Credential | undefined> {
+    return this.load(id);
+  }
+
+  async delete(id: string): Promise<void> {
+    this.credentials.delete(id);
+    this.revokedIds.delete(id);
   }
 
   async list(filter?: CredentialFilter): Promise<Credential[]> {

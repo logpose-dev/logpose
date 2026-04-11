@@ -33,6 +33,7 @@ export interface Credential {
   id: string;
   type: string[];
   issuer: string;
+  aud?: string;
   validFrom: string;
   validUntil?: string;
   credentialStatus: CredentialStatus;
@@ -48,6 +49,17 @@ export interface CredentialFilter {
   until?: string;
 }
 
+export interface ICredentialStore {
+  save(credential: Credential): Promise<void>;
+  load(id: string): Promise<Credential | undefined>;
+  get?(id: string): Promise<Credential | undefined>;
+  delete(id: string): Promise<void>;
+  list(filter?: CredentialFilter): Promise<Credential[]>;
+  count(filter?: CredentialFilter): Promise<number>;
+  revoke(id: string): Promise<void>;
+  isRevoked(id: string): Promise<boolean>;
+}
+
 export interface CredentialStore {
   save(credential: Credential): Promise<void>;
   get(id: string): Promise<Credential | undefined>;
@@ -58,14 +70,25 @@ export interface CredentialStore {
 }
 
 export interface AttestorConfig {
-  store?: CredentialStore;
+  store?: ICredentialStore | CredentialStore;
   privateKey?: string;
 }
 
+export interface RevocationCache {
+  get(statusId: string): boolean | undefined | Promise<boolean | undefined>;
+  set(statusId: string, revoked: boolean): void | Promise<void>;
+}
+
+export type RevocationBatchResult = Record<string, boolean> | ReadonlyMap<string, boolean>;
+export type RevocationBatchFetcher = (statusIds: string[]) => Promise<RevocationBatchResult>;
+
 export interface VerifyOptions {
   trustedIssuers?: string[] | Set<string>;
-  store?: CredentialStore;
+  store?: ICredentialStore | CredentialStore;
   checkExpiry?: boolean;
+  expectedAudience?: string;
+  revocationCache?: RevocationCache | Map<string, boolean>;
+  revocationBatchFetcher?: RevocationBatchFetcher;
 }
 
 export interface VerifyResult {
@@ -86,4 +109,6 @@ export interface RecordOptions {
   subject?: string;
   validUntil?: string;
   holderBinding?: HolderBinding;
+  audience?: string;
+  aud?: string;
 }

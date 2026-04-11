@@ -1,8 +1,12 @@
 # logpose
 
-Verifiable reputation and attestation SDK for AI agents. Agents cryptographically sign credentials proving what they've done, and verifiers check those credentials.
+Verifiable reputation and attestation SDK for agent-to-agent communication.
 
-Built on [W3C Verifiable Credentials 2.0](https://www.w3.org/TR/vc-data-model-2.0/), [did:key](https://w3c-ccg.github.io/did-method-key/), and Ed25519 signatures.
+The SDK follows [W3C Verifiable Credentials 2.0](https://www.w3.org/TR/vc-data-model-2.0/), `did:key`, and Ed25519 signatures.
+
+## Runtime support
+
+`@logpose-dev/logpose` uses Web Crypto (`globalThis.crypto.subtle`) and is designed for Node.js, Cloudflare Workers, and Next.js Edge runtimes without Node crypto polyfills.
 
 ## Install
 
@@ -10,48 +14,88 @@ Built on [W3C Verifiable Credentials 2.0](https://www.w3.org/TR/vc-data-model-2.
 pnpm add @logpose-dev/logpose
 ```
 
-## Usage
+## Quick start
 
 ```typescript
 import { createAttestor, verifyCredential } from '@logpose-dev/logpose';
 
-// Create an attestor (generates a new Ed25519 keypair)
 const agent = await createAttestor();
-console.log(agent.did); // did:key:z6Mk...
 
-// Record a credential
 const credential = await agent.record({
   task: 'code-review',
   outcome: 'approved',
   evidence: { pr: 42, repo: 'acme/api' },
 });
 
-// Verify it (async)
 const result = await verifyCredential(credential);
 console.log(result.valid);          // true
-console.log(result.issuerTrusted);  // true (permissive mode — empty registry)
-console.log(result.holderVerified); // true (self-attestation)
-
-// Persist identity across sessions
-const key = agent.getPrivateKeyHex();
-const sameAgent = await createAttestor({ privateKey: key });
-console.log(sameAgent.did === agent.did); // true
+console.log(result.issuerTrusted);  // true when trust registry is empty
+console.log(result.holderVerified); // true for self-attestation
 ```
 
-### Revocation
+## Features
 
-Every credential includes a `credentialStatus` field. Revoke via the attestor, check via the verifier:
+### Pluggable storage
+
+`createAttestor()` accepts `store` and defaults to in-memory `MemoryStore`.
 
 ```typescript
-await agent.revoke(credential.id);
+import {
+  createAttestor,
+  type Credential,
+  type CredentialFilter,
+  type ICredentialStore,
+} from '@logpose-dev/logpose';
 
-const result = await verifyCredential(credential, { store: agent.store });
-console.log(result.revoked); // true
+class DurableStore implements ICredentialStore {
+  async save(_credential: Credential): Promise<void> {}
+  async load(_id: string): Promise<Credential | undefined> { return undefined; }
+  async delete(_id: string): Promise<void> {}
+  async list(_filter?: CredentialFilter): Promise<Credential[]> { return []; }
+  async count(_filter?: CredentialFilter): Promise<number> { return 0; }
+  async revoke(_id: string): Promise<void> {}
+  async isRevoked(_id: string): Promise<boolean> { return false; }
+}
+
+const attestor = await createAttestor({ store: new DurableStore() });
 ```
 
-### Holder Binding
+### Revocation and batch verification
 
-When an issuer attests about a different subject, the subject can prove consent by signing a challenge:
+Use `verifyBatch()` to dedupe revocation lookups and avoid N+1 fetches.
+
+```typescript
+import { verifyBatch } from '@logpose-dev/logpose';
+
+const results = await verifyBatch(credentials, {
+  revocationBatchFetcher: async (statusIds) => {
+    const response = await fetch('https://registry.example/revocation/batch', {
+      method: 'POST',
+      body: JSON.stringify({ statusIds }),
+    });
+    return await response.json() as Record<string, boolean>;
+  },
+});
+```
+
+### Audience binding
+
+Credentials can include `aud` and verifiers can require strict audience matching.
+
+```typescript
+const credential = await agent.record(
+  { task: 'deploy', outcome: 'success' },
+  { audience: 'https://agent-b.example' },
+);
+
+await verifyCredential(credential, {
+  expectedAudience: 'https://agent-b.example',
+});
+```
+
+If `expectedAudience` is provided and does not match `credential.aud`, verification throws.
+
+### Holder binding
 
 ```typescript
 import { createAttestor, createHolderBinding, verifyCredential } from '@logpose-dev/logpose';
@@ -59,95 +103,42 @@ import { createAttestor, createHolderBinding, verifyCredential } from '@logpose-
 const issuer = await createAttestor();
 const subject = await createAttestor();
 
-// Subject signs a challenge to prove consent
-const binding = createHolderBinding(
-  { privateKey: /* subject's private key bytes */, publicKey: /* subject's public key bytes */ },
+const binding = await createHolderBinding(
+  { privateKey: /* subject private key bytes */, publicKey: /* subject public key bytes */ },
   'consent-challenge-123',
 );
 
-// Issuer includes the binding in the credential
 const credential = await issuer.record(
   { task: 'audit', outcome: 'clean' },
   { subject: subject.did, holderBinding: binding },
 );
 
 const result = await verifyCredential(credential);
-console.log(result.holderVerified); // true — subject proved consent
+console.log(result.holderVerified); // true
 ```
 
-Without a holder binding, third-party attestations have `holderVerified: false`.
+## Migration guide (v0.1.x -> v0.2.0)
 
-### Trust Registry
+This release includes breaking API changes and should be published as a new minor (`0.2.0`) under semver pre-1.0 rules.
 
-```typescript
-import { trustIssuer, verifyCredential } from '@logpose-dev/logpose';
+### Breaking changes
 
-// Option 1: Global registry
-trustIssuer(trustedAgent.did);
-const result = await verifyCredential(credential);
+- `generateKeypair()` is now async.
+- `keypairFromPrivateKey()` is now async.
+- `createCredential()` is now async.
+- `createHolderBinding()` is now async.
+- Crypto internals now use Web Crypto only (no `@noble/curves` runtime signing path).
 
-// Option 2: Injectable trust (no global state)
-const result2 = await verifyCredential(credential, {
-  trustedIssuers: [trustedAgent.did],
-});
-```
+### Storage API updates
 
-### Credential Expiry
+- New `ICredentialStore` interface uses `load()` and `delete()`.
+- Legacy `CredentialStore` (`get()`) remains accepted via adapter for compatibility.
 
-```typescript
-const credential = await agent.record(
-  { task: 'deploy', outcome: 'success' },
-  { validUntil: new Date(Date.now() + 86400_000).toISOString() },
-);
+### New verification capabilities
 
-const result = await verifyCredential(credential);
-console.log(result.expired); // false (until validUntil passes)
-```
-
-### Credential Structure (W3C VC 2.0)
-
-```json
-{
-  "@context": [
-    "https://www.w3.org/ns/credentials/v2",
-    "https://w3id.org/security/data-integrity/v2"
-  ],
-  "id": "urn:uuid:550e8400-e29b-41d4-a716-446655440000",
-  "type": ["VerifiableCredential", "LogposeAttestation"],
-  "issuer": "did:key:z6Mk...",
-  "validFrom": "2026-04-08T15:30:00.000Z",
-  "credentialStatus": {
-    "type": "LogposeRevocation",
-    "id": "urn:uuid:550e8400-e29b-41d4-a716-446655440000"
-  },
-  "credentialSubject": {
-    "id": "did:key:z6Mk...",
-    "task": "code-review",
-    "outcome": "approved",
-    "evidence": { "pr": 42 }
-  },
-  "proof": {
-    "type": "Ed25519Signature2024",
-    "created": "2026-04-08T15:30:00.000Z",
-    "verificationMethod": "did:key:z6Mk...#key-1",
-    "proofPurpose": "assertionMethod",
-    "proofValue": "a1b2c3..."
-  }
-}
-```
-
-### VerifyResult
-
-```typescript
-interface VerifyResult {
-  valid: boolean;          // Ed25519 signature check
-  issuerTrusted: boolean;  // Trust registry check
-  expired: boolean;        // validUntil check
-  revoked: boolean;        // Store revocation check
-  holderVerified: boolean; // Holder binding / self-attestation check
-  credential: Credential;
-}
-```
+- `verifyBatch(credentials, options?)` for deduplicated revocation checks.
+- `VerifyOptions.expectedAudience` for replay resistance.
+- `VerifyOptions.revocationCache` and `VerifyOptions.revocationBatchFetcher` for high-throughput verifier services.
 
 ## License
 
