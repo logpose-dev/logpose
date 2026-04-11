@@ -1,0 +1,29 @@
+{
+  "name": "@logpose-dev/delegation-demo",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Local two-agent delegation demo using Logpose A2A trust packages",
+  "type": "module",
+  "scripts": {
+    "demo": "FORCE_COLOR=1 tsx index.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@logpose-dev/a2a": "workspace:*",
+    "@logpose-dev/logpose": "workspace:*",
+    "chalk": "^5.6.2",
+    "cors": "^2.8.5",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^4.17.21",
+    "@types/node": "^24.6.1",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.2"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}
