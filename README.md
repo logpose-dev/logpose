@@ -1,4 +1,4 @@
-# logpose monorepo
+# logpose
 
 This repository contains the Logpose npm packages managed together in a pnpm workspace.
 
