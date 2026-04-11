@@ -1,0 +1,40 @@
+{
+  "name": "@logpose-dev/a2a",
+  "version": "0.1.0",
+  "description": "Network and transport adapters for Logpose agent-to-agent credential exchange",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "ai-agents",
+    "attestation",
+    "credentials",
+    "a2a",
+    "logpose"
+  ],
+  "license": "MIT",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=18"
+  },
+  "peerDependencies": {
+    "@logpose-dev/logpose": "^0.2.0"
+  },
+  "devDependencies": {
+    "@logpose-dev/logpose": "workspace:*",
+    "typescript": "^5.9.3"
+  }
+}
